@@ -32,7 +32,7 @@ import seaborn as sns
 # va:相角                   v0：幅值
 #%% 数据读取
 data=[]
-for l in open('D:\\pythonfiles\\1047.txt','r'):
+for l in open('14.txt','r'):
     row = [float(x) for x in l.split()]
     row+=[0]*(8-len(row))
     data.append(row)
@@ -119,8 +119,8 @@ pis_1=(powpgi-powpdi)/100                                         #基准值处�
 pis_2=(powqgj-powqdj)/100                                         #基准值处理
 powi0=powi*0
 powi0[0:node_number-1]=0 
-pis=sparse.coo_matrix((pis_1,(powi-1,powi0)))/100                #pis与qis的求解结果正确
-qis=sparse.coo_matrix((pis_2,(powi-1,powi0)))/100                #
+pis = sparse.coo_matrix((pis_1, (powi - 1, powi0)),shape=(node_number, 1))   # pis与qis的求解结果正确
+qis = sparse.coo_matrix((pis_2, (powi - 1, powi0)),shape=(node_number, 1))        #
 powi0=np.transpose(powi0)
 v0=(node_number,1)                                               #单位矩阵
 v0=np.ones(v0)                                                   #初始化电压值
@@ -133,18 +133,22 @@ for i in range(0,len(pvi)):
     n=n+1
 accuracy=1  #精度
 iteration=1     #迭代次数
+
+a = np.angle(y.toarray())
+va0 = (node_number, 1)
+va0 = np.zeros(va0)  # 初始化电压相角
+va = va0
+yi,yj=np.where(a==0)
+
 #%% 开始迭代=================================
 while (accuracy>data[1][0] and iteration<20):
-#%% 不平衡量    
-    a=np.angle(y.toarray())
-    va0=(node_number,1)
-    va0=np.zeros(va0)                  #初始化电压相角
-    va=va0
+#%% 不平衡量
     ij=va-va.T-a
+    ij[yi,yj]=0
     v00=np.cos(va)+1j*np.sin(va)
-    v=v0*v00
+    v=np.multiply(v0,v00)
     delt0=np.conj(y*v)
-    delt1=v*delt0                       #代入节点电压求出的功率
+    delt1=np.multiply(v,delt0)                     #代入节点电压求出的功率
     deltp=pis-np.real(delt1)            #有功修正量
     deltq=qis-np.imag(delt1)            #无功修正量
     deltp[int(data[2][1]-1)]=0          #有功修正量(处理平衡节点)
@@ -155,17 +159,20 @@ while (accuracy>data[1][0] and iteration<20):
     #np.diag(x.flat)与matlab中diag（x）相同
     #np.dots满阵的情况下表示矩阵的乘法
 #%% 雅可比矩阵的形成
-    h1_1=np.dot(np.diag(v0.flat),y_abs.toarray()*np.sin(ij))
-    h1_2=np.dot(np.diag(v0.flat),y_abs.toarray()*np.sin(ij))
-    hh=np.diag(np.dot(h1_1,v0).flat)-np.dot(h1_1,np.diag(v0.flat))    # H矩阵形成
-    nn_1=np.dot(np.diag(v0.flat),y_abs.toarray()*np.cos(ij))  
-    nn_2=np.dot(y_abs.toarray()*np.cos(ij),v0)
+    siny1 = np.multiply(y_abs.toarray(),np.sin(ij))
+    cosy1 = np.multiply(y_abs.toarray(),np.cos(ij))
+    v1 = np.diag(v0.flat)
+    h1_1=np.dot(v1,siny1)
+    h1_2=np.dot(v1,siny1)
+    hh=np.diag(np.dot(h1_1,v0).flat)-np.dot(h1_1,v1)    # H矩阵形成
+    nn_1=np.dot(v1,cosy1)
+    nn_2=np.dot(cosy1,v0)
     nn=-nn_1-np.diag(nn_2.flat)                                       # N矩阵形成
-    jj_1=np.dot(np.diag(v0.flat),y_abs.toarray()*np.cos(ij)) 
-    jj_2=np.dot(np.diag(v0.flat),y_abs.toarray()*np.cos(ij))
-    jj=-np.diag(np.dot(jj_1,v0).flat)+np.dot(jj_1,np.diag(v0.flat))   # J矩阵形成
-    ll_1=np.dot(np.diag(v0.flat),y_abs.toarray()*np.sin(ij))
-    ll_2=np.dot(y_abs.toarray()*np.sin(ij),v0)
+    jj_1=np.dot(v1,cosy1)
+    jj_2=np.dot(v1,cosy1)
+    jj=-np.diag(np.dot(jj_1,v0).flat)+np.dot(jj_1,v1)   # J矩阵形成
+    ll_1=np.dot(v1,siny1)
+    ll_2=np.dot(siny1,v0)
     ll=-ll_1-np.diag(ll_2.flat)                                       # L矩阵初步形成
     #对四子矩阵处理
     nn[:,[pvi_int-1]]=0
@@ -194,24 +201,25 @@ while (accuracy>data[1][0] and iteration<20):
     iteration=iteration+1
 #循环结束================================================
 #%% 结果输出
-print('电压幅值：\n',v0)
-x_values = list(range(1, node_number+1))
-plt.figure(2)
-ax1=plt.subplot(2,2,1)#在图表2中创建子图1  
-ax1=plt.scatter(x_values,va,50,c='red',marker='x',alpha=1)
-plt.title('Vangle')
-plt.xlabel('variables x')
-plt.ylabel('variables y')
-plt.legend(loc='upper right')   #显示图例
-
-ax2=plt.subplot(2,2,2)#在图表2中创建子图2  
-ax2=plt.scatter(x_values,v0,50,c='blue',marker='o',alpha=1)
-plt.title('V0')
-plt.xlabel('variables x')
-plt.ylabel('variables y')
-plt.legend(loc='upper right')   #显示图例
-
-print('电压相角：\n',va)
+#print('电压幅值：\n',v0)
+#x_values = list(range(1, node_number+1))
+#plt.figure(2)
+#ax1=plt.subplot(2,2,1)#在图表2中创建子图1  
+#ax1=plt.scatter(x_values,va.tolist(),50,c='red',marker='x',alpha=1)
+#plt.title('Vangle')
+#plt.xlabel('variables x')
+#plt.ylabel('variables y')
+#plt.legend(loc='upper right')   #显示图例
+#
+#ax2=plt.subplot(2,2,2)#在图表2中创建子图2  
+#ax2=plt.scatter(x_values,v0,50,c='blue',marker='o',alpha=1)
+#plt.title('V0')
+#plt.xlabel('variables x')
+#plt.ylabel('variables y')
+#plt.legend(loc='upper right')   #显示图例
+#
+#print('电压相角：\n',va)
 end = datetime.datetime.now()
 print ('迭代次数:',iteration)
+
 
